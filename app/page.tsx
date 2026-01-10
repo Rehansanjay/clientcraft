@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
@@ -10,9 +12,11 @@ export default function Home() {
         you can send in minutes.
       </p>
 
-      <button className="bg-black text-white px-6 py-3 rounded-md text-lg">
-        Generate Proposal
-      </button>
+      <Link href="/generate">
+        <button className="bg-black text-white px-6 py-3 rounded-md text-lg">
+          Generate Proposal
+        </button>
+      </Link>
     </main>
   );
 }
