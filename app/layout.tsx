@@ -1,8 +1,9 @@
 import "./globals.css";
+import ThemeProvider from "./theme-provider";
 
 export const metadata = {
-  title: "ClientCraft",
-  description: "Create winning client proposals in minutes",
+  title: "Klynexa",
+  description: "Intelligent systems for serious work",
 };
 
 export default function RootLayout({
@@ -11,9 +12,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-white text-black">
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-[var(--bg)] text-[var(--text)] antialiased">
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
