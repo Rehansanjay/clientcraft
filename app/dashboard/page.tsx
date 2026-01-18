@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getSupabaseClient } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
 import AppShell from "@/components/AppShell";
 
 /* ---------- TYPES ---------- */
@@ -28,7 +28,6 @@ function getConfidenceLabel(score: number) {
 
 export default function Dashboard() {
   const router = useRouter();
-  const supabase = getSupabaseClient();
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,10 +79,7 @@ export default function Dashboard() {
   return (
     <AppShell>
       <div className="mb-10">
-        <Link
-          href="/"
-          className="text-sm text-[#9AA4B2] hover:underline"
-        >
+        <Link href="/" className="text-sm text-[#9AA4B2] hover:underline">
           ← Back to home
         </Link>
 
@@ -98,13 +94,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      {loading && (
-        <p className="text-[#9AA4B2]">Loading…</p>
-      )}
+      {loading && <p className="text-[#9AA4B2]">Loading…</p>}
 
-      {pageError && (
-        <p className="text-red-500">{pageError}</p>
-      )}
+      {pageError && <p className="text-red-500">{pageError}</p>}
 
       {!loading && proposals.length === 0 && (
         <div className="border border-dashed border-[#1F2937] rounded-lg p-10 text-center">
