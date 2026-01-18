@@ -2,13 +2,20 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Groq from "groq-sdk";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+/* ---------- ENV SAFETY ---------- */
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const groqKey = process.env.GROQ_API_KEY;
+
+if (!supabaseUrl || !serviceRoleKey || !groqKey) {
+  throw new Error("Missing required environment variables");
+}
+
+/* ---------- CLIENTS ---------- */
+const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!,
+  apiKey: groqKey,
 });
 
 const FREE_LIMIT = 3;
@@ -44,6 +51,7 @@ function evaluateSendStatus({
   };
 }
 
+/* ---------- API ---------- */
 export async function POST(req: Request) {
   try {
     /* ---------- AUTH ---------- */
