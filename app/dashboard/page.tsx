@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "../lib/supabase";
+import { getSupabaseClient } from "../lib/supabase";
 import AppShell from "@/components/AppShell";
 
 /* ---------- TYPES ---------- */
@@ -28,6 +28,7 @@ function getConfidenceLabel(score: number) {
 
 export default function Dashboard() {
   const router = useRouter();
+  const supabase = getSupabaseClient();
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
