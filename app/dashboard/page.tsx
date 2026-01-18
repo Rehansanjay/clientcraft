@@ -48,9 +48,9 @@ export default function Dashboard() {
           return;
         }
 
-        if (!mounted) return;
-
-        setEmail(session.user.email ?? null);
+        if (mounted) {
+          setEmail(session.user.email ?? null);
+        }
 
         const { data, error } = await supabase
           .from("proposals")
@@ -58,13 +58,15 @@ export default function Dashboard() {
           .eq("user_id", session.user.id)
           .order("created_at", { ascending: false });
 
+        if (!mounted) return;
+
         if (error) {
           setPageError("Failed to load proposals.");
         } else {
           setProposals(data || []);
         }
-      } catch {
-        setPageError("Something went wrong.");
+      } catch (err) {
+        if (mounted) setPageError("Something went wrong.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -83,7 +85,7 @@ export default function Dashboard() {
           ← Back to home
         </Link>
 
-        <h1 className="text-2xl font-semibold mt-4">
+        <h1 className="text-2xl font-semibold mt-4 text-white">
           Your proposals
         </h1>
 
@@ -105,7 +107,7 @@ export default function Dashboard() {
           </p>
           <button
             onClick={() => router.push("/generate")}
-            className="px-6 py-3 rounded-md bg-white text-black"
+            className="px-6 py-3 rounded-md bg-white text-black font-medium hover:bg-gray-200 transition-colors"
           >
             Generate your first proposal
           </button>
@@ -123,22 +125,25 @@ export default function Dashboard() {
                 <span>
                   {new Date(p.created_at).toLocaleString()}
                 </span>
-                <span>
+                <span className="font-medium text-blue-400">
                   {getConfidenceLabel(p.confidence_score)}
                 </span>
               </div>
 
-              <p className="text-xs text-[#9AA4B2] mb-3">
-                {p.industry} · {p.goal} · {p.tone}
+              <p className="text-xs text-[#9AA4B2] mb-3 uppercase tracking-wider">
+                {p.industry} • {p.goal} • {p.tone}
               </p>
 
-              <pre className="whitespace-pre-line text-sm mb-4 text-[#EDEFF2]">
+              <pre className="whitespace-pre-line text-sm mb-4 text-[#EDEFF2] font-sans">
                 {p.content}
               </pre>
 
               <button
-                onClick={() => navigator.clipboard.writeText(p.content)}
-                className="text-xs underline text-[#9AA4B2]"
+                onClick={() => {
+                  navigator.clipboard.writeText(p.content);
+                  alert("Copied to clipboard!");
+                }}
+                className="text-xs underline text-[#9AA4B2] hover:text-white"
               >
                 Copy proposal
               </button>
