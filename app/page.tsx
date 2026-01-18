@@ -3,17 +3,26 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { supabase } from "./lib/supabase";
+import { getSupabaseClient } from "./lib/supabase";
+
 
 export default function Home() {
   const router = useRouter();
+  const supabase = getSupabaseClient();
+
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(() => {
-      setCheckingAuth(false);
+      if (mounted) setCheckingAuth(false);
     });
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [supabase]);
 
   const handleGenerateClick = async () => {
     const { data } = await supabase.auth.getSession();
@@ -23,7 +32,7 @@ export default function Home() {
   return (
     <main className="min-h-screen">
 
-      {/* HERO — TOP */}
+      {/* HERO */}
       <section className="max-w-6xl mx-auto px-6 pt-20 pb-32">
         <div className="max-w-3xl space-y-6">
 
@@ -47,7 +56,7 @@ export default function Home() {
             <button
               onClick={handleGenerateClick}
               disabled={checkingAuth}
-              className="bg-black text-white px-8 py-4 rounded-md font-medium"
+              className="bg-black text-white px-8 py-4 rounded-md font-medium disabled:opacity-50"
             >
               Generate your first proposal
             </button>
@@ -69,7 +78,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* WHY KLYNEXA WORKS */}
+      {/* WHY */}
       <section className="max-w-6xl mx-auto px-6 py-28 border-t">
         <h2 className="text-3xl font-semibold mb-20">
           Why Klynexa works
@@ -94,7 +103,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
+      {/* HOW */}
       <section className="max-w-6xl mx-auto px-6 py-28">
         <h2 className="text-3xl font-semibold mb-4">
           How it works
@@ -122,7 +131,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FINAL CTA — VERSION 2 (WITH LINKS) */}
+      {/* FINAL CTA */}
       <section className="max-w-6xl mx-auto px-6 pb-32">
         <div className="rounded-2xl bg-black text-white p-14">
           <h2 className="text-3xl font-semibold mb-4">
