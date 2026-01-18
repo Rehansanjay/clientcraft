@@ -4,13 +4,13 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseClient } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
+
 
 const TRIAL_LIMIT = 3;
 
 export default function GeneratePage() {
   const router = useRouter();
-  const supabase = getSupabaseClient();
 
   /* ---------------- STATE ---------------- */
   const [input, setInput] = useState("");

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getSupabaseClient } from "./lib/supabase";
+import { supabase } from "./lib/supabase";
+
+
 
 
 export default function Home() {
   const router = useRouter();
-  const supabase = getSupabaseClient();
 
   const [checkingAuth, setCheckingAuth] = useState(true);
 
