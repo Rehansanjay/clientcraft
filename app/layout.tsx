@@ -1,5 +1,6 @@
 import "./globals.css";
 import ThemeProvider from "./theme-provider";
+import Footer from "@/components/Footer";
 
 export const metadata = {
   title: "Klynexa",
@@ -16,6 +17,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-[var(--bg)] text-[var(--text)] antialiased">
         <ThemeProvider>
           {children}
+          <Footer />
         </ThemeProvider>
       </body>
     </html>

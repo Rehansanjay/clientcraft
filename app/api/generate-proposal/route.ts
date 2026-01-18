@@ -11,20 +11,38 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 });
 
-const INDUSTRY_CONTEXT: Record<string, string> = {
-  "Power Tools":
-    "Buyers care about safety, durability, certifications, and real-world usage.",
-  "Textile":
-    "Buyers care about fabric quality, consistency, and seasonal relevance.",
-  "Restaurant":
-    "Customers care about clarity, speed of choice, and trust.",
-  "SaaS":
-    "Clients care about efficiency, reliability, and onboarding clarity.",
-  "General Business":
-    "Clients want professionalism and confidence before engaging.",
-};
-
 const FREE_LIMIT = 3;
+
+/* ---------- SEND STATUS LOGIC ---------- */
+function evaluateSendStatus({
+  tone,
+  makeClientFocused,
+}: {
+  tone: string;
+  makeClientFocused: boolean;
+}) {
+  if (tone === "bold" && makeClientFocused) {
+    return {
+      status: "send-ready",
+      reason:
+        "Clear positioning, concrete example, and client decision risk addressed.",
+    };
+  }
+
+  if (tone === "safe") {
+    return {
+      status: "review",
+      reason:
+        "Professional and trustworthy, but could speak more directly to client risk.",
+    };
+  }
+
+  return {
+    status: "revise",
+    reason:
+      "Needs clearer relevance or stronger positioning for this client.",
+  };
+}
 
 export async function POST(req: Request) {
   try {
@@ -35,32 +53,35 @@ export async function POST(req: Request) {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user } } = await supabase.auth.getUser(token);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(token);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     /* ---------- PROFILE ---------- */
-    const { data: profile } = await supabase
+    const { data: profile, error } = await supabase
       .from("profiles")
-      .select("plan, subscription_active")
+      .select("plan, proposal_count, subscription_active")
       .eq("id", user.id)
       .single();
 
-    const isPro =
-      profile?.plan === "pro" && profile?.subscription_active === true;
-
-    /* ---------- USAGE ---------- */
-    const { data: usage } = await supabase
-      .from("user_usage")
-      .select("free_trial_count")
-      .eq("user_id", user.id)
-      .single();
-
-    if (!isPro && usage?.free_trial_count >= FREE_LIMIT) {
+    if (error || !profile) {
       return NextResponse.json(
-        { error: "Free trial limit reached" },
+        { error: "Profile not found" },
+        { status: 401 }
+      );
+    }
+
+    const isPro =
+      profile.plan === "pro" && profile.subscription_active === true;
+
+    /* ---------- FREE LIMIT ---------- */
+    if (!isPro && profile.proposal_count >= FREE_LIMIT) {
+      return NextResponse.json(
+        { error: "Free limit reached" },
         { status: 403 }
       );
     }
@@ -76,20 +97,14 @@ export async function POST(req: Request) {
       goalNote,
       priorityNote,
       contextNote,
+      makeClientFocused,
     } = await req.json();
 
-    const contextBlock = `
-Industry:
-${INDUSTRY_CONTEXT[industry] || INDUSTRY_CONTEXT["General Business"]}
-
-Goal:
-${goal}${goalNote ? ` (${goalNote})` : ""}
-
-Priority:
-${priority}${priorityNote ? ` (${priorityNote})` : ""}
-
-${contextNote ? `Additional context:\n${contextNote}` : ""}
-`;
+    /* ---------- SEND STATUS ---------- */
+    const sendEval = evaluateSendStatus({
+      tone,
+      makeClientFocused,
+    });
 
     /* ---------- AI ---------- */
     const completion = await groq.chat.completions.create({
@@ -101,61 +116,68 @@ ${contextNote ? `Additional context:\n${contextNote}` : ""}
 You are a professional freelancer writing client proposals.
 
 Rules:
-- Never sound generic or templated
-- Keep under 120 words
-- Use ONE concrete example
-- No metrics or fake numbers
+- Max 120 words
+- One realistic example
 - Calm, human tone
-
-Structure:
-1. Understanding sentence
-2. Problem or goal sentence
-3. How you'd solve it (with example)
-4. Polite next step
+- Never generic
+${makeClientFocused && isPro ? "- Address client decision risk explicitly" : ""}
 `,
         },
         {
           role: "user",
           content: `
-${contextBlock}
-
-Client details:
+Client context:
 ${input}
 
-Role:
-${role}
+Role: ${role}
+Industry: ${industry}
+Goal: ${goal}
+Priority: ${priority}
+Tone: ${tone}
 
-Tone:
-${tone}
+Notes:
+${goalNote || ""}
+${priorityNote || ""}
+${contextNote || ""}
 `,
         },
       ],
     });
 
     const proposal = completion.choices[0].message.content;
-    // ✅ SAVE PROPOSAL (THIS FIXES DASHBOARD)
-await supabase.from("proposals").insert({
-  user_id: user.id,
-  content: proposal,
-  industry,
-  goal,
-  tone,
-});
 
+    /* ---------- SAVE PROPOSAL ---------- */
+    await supabase.from("proposals").insert({
+      user_id: user.id,
+      content: proposal,
+      industry,
+      goal,
+      tone,
+      send_status: sendEval.status,
+      send_reason: isPro ? sendEval.reason : null,
+    });
 
-    /* ---------- TRACK FREE USAGE ONLY ---------- */
+    /* ---------- USAGE ---------- */
     if (!isPro) {
-      await supabase.from("user_usage").upsert({
-        user_id: user.id,
-        free_trial_count: (usage?.free_trial_count || 0) + 1,
-      });
+      await supabase
+        .from("profiles")
+        .update({
+          proposal_count: profile.proposal_count + 1,
+        })
+        .eq("id", user.id);
     }
 
     return NextResponse.json({
       proposal,
+      sendStatus: sendEval.status,
+      sendReason: isPro ? sendEval.reason : null,
       isPro,
     });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 }
+    );
   }
 }
