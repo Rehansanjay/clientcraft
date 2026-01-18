@@ -1,12 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 
-export function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !anon) {
-    throw new Error("Supabase environment variables are missing");
-  }
-
-  return createClient(url, anon);
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Supabase env vars are missing");
 }
+
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  }
+);
