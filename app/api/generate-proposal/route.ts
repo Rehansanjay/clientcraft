@@ -2,22 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Groq from "groq-sdk";
 
-/* ---------- ENV SAFETY ---------- */
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const groqKey = process.env.GROQ_API_KEY;
-
-if (!supabaseUrl || !serviceRoleKey || !groqKey) {
-  throw new Error("Missing required environment variables");
-}
-
-/* ---------- CLIENTS ---------- */
-const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-const groq = new Groq({
-  apiKey: groqKey,
-});
-
 const FREE_LIMIT = 3;
 
 /* ---------- SEND STATUS LOGIC ---------- */
@@ -51,9 +35,23 @@ function evaluateSendStatus({
   };
 }
 
-/* ---------- API ---------- */
 export async function POST(req: Request) {
   try {
+    /* ---------- ENV (RUNTIME SAFE) ---------- */
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey || !groqKey) {
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const groq = new Groq({ apiKey: groqKey });
+
     /* ---------- AUTH ---------- */
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
