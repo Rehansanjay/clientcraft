@@ -1,11 +1,9 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabase";
-
+import supabase from "../lib/supabase"; // Corrected Default Import
 
 const TRIAL_LIMIT = 3;
 
