@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
-import { useCompletion } from "ai/react";
+import { useCompletion } from "@ai-sdk/react";
 
 type Mode = "freelancer" | "student";
 
