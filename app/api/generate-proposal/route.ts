@@ -3,11 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText } from "ai";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 const groq = createOpenAI({
   baseURL: "https://api.groq.com/openai/v1",
   apiKey: process.env.GROQ_API_KEY!,
@@ -52,8 +47,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabase.auth.getUser(token);
+    // Create a Supabase client scoped to this user
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data } = await supabase.auth.getUser();
     if (!data.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -198,6 +199,10 @@ ${contextNote || ""}
 
         try {
           /* ---------- SAVE ---------- */
+          // Re-create user client inside callback or use the one from closure?
+          // The 'supabase' client from closure relies on 'authHeader'.
+          // 'streamText' might run after the request loop, but 'supabase' object capturing 'authHeader' should persist.
+
           const { error: insertError } = await supabase.from("proposals").insert({
             user_id: data.user.id,
             content: text,
