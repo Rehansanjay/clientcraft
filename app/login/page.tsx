@@ -1,24 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function LoginPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  /* ---------- REDIRECT IF ALREADY LOGGED IN ---------- */
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.push("/generate");
+      }
+    });
+  }, [router]);
+
+  /* ---------- LOGIN ---------- */
   const handleLogin = async () => {
-    if (!email) return;
+    if (!email || loading) return;
 
     setLoading(true);
+    setError(null);
 
-    await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: `${window.location.origin}/generate`,
       },
     });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
 
     setLoading(false);
     setSent(true);
@@ -46,9 +67,15 @@ export default function LoginPage() {
               className="w-full border rounded-md p-3 mb-4 text-sm"
             />
 
+            {error && (
+              <p className="text-sm text-red-500 mb-3">
+                {error}
+              </p>
+            )}
+
             <button
               onClick={handleLogin}
-              disabled={loading}
+              disabled={loading || !email.includes("@")}
               className="w-full bg-black text-white py-3 rounded-md font-medium disabled:opacity-50"
             >
               {loading ? "Sending link…" : "Send login link"}

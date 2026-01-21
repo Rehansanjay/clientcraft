@@ -2,113 +2,242 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Groq from "groq-sdk";
 
-// FIX: This stops the red lines in the logic below
-interface UserProfile {
-  plan: string;
-  proposal_count: number;
-  subscription_active: boolean;
-}
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
-const FREE_LIMIT = 3;
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY!,
+});
 
-function evaluateSendStatus(tone: string, makeClientFocused: boolean) {
+const FREELANCER_LIMIT = 3;
+const STUDENT_LIMIT = 5;
+
+/* ---------- SEND STATUS ---------- */
+function evaluateSendStatus({
+  tone,
+  makeClientFocused,
+}: {
+  tone: string;
+  makeClientFocused: boolean;
+}) {
   if (tone === "bold" && makeClientFocused) {
     return {
       status: "send-ready",
-      reason: "Clear positioning with concrete example and client decision risk addressed.",
+      reason: "Direct, specific, and outcome-focused.",
     };
   }
+
   if (tone === "safe") {
     return {
       status: "review",
-      reason: "Professional and trustworthy, but could speak more directly to client risk.",
+      reason: "Clear and professional, but could be sharper.",
     };
   }
+
   return {
     status: "revise",
-    reason: "Needs clearer relevance or stronger positioning.",
+    reason: "Too vague or generic.",
   };
 }
 
 export async function POST(req: Request) {
   try {
+    /* ---------- AUTH ---------- */
     const authHeader = req.headers.get("authorization");
-    if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-    const typedProfile = profile as UserProfile;
-
-    const isPro = typedProfile?.plan === "pro" && typedProfile?.subscription_active;
-    if (!isPro && (typedProfile?.proposal_count || 0) >= FREE_LIMIT) {
-      return NextResponse.json({ error: "Limit reached" }, { status: 403 });
+    if (!authHeader) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const sendEval = evaluateSendStatus(body.tone, body.makeClientFocused);
+    const token = authHeader.replace("Bearer ", "");
+    const { data } = await supabase.auth.getUser(token);
+    if (!data.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
+    /* ---------- PROFILE ---------- */
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select(
+        "plan, subscription_active, freelancer_count, student_count"
+      )
+      .eq("id", data.user.id)
+      .single();
+
+    if (!profile) {
+      return NextResponse.json({ error: "Profile missing" }, { status: 401 });
+    }
+
+    const isPro =
+      profile.plan === "pro" && profile.subscription_active === true;
+
+    /* ---------- INPUT ---------- */
+    const {
+      mode = "freelancer",
+      input,
+      role,
+      industry,
+      goal,
+      priority,
+      tone,
+      contextNote,
+      makeClientFocused,
+    } = await req.json();
+
+    const isFreelancer = mode === "freelancer";
+    const currentCount = isFreelancer
+      ? profile.freelancer_count
+      : profile.student_count;
+
+    const currentLimit = isFreelancer
+      ? FREELANCER_LIMIT
+      : STUDENT_LIMIT;
+
+    if (!isPro && currentCount >= currentLimit) {
+      return NextResponse.json(
+        { error: "Free limit reached" },
+        { status: 403 }
+      );
+    }
+
+    /* ---------- SYSTEM PROMPT (HARD TRAINED) ---------- */
+    const systemPrompt =
+      mode === "student"
+        ? `
+You are a real student or early-career developer sending ONE cold message to a founder or hiring manager.
+
+YOU ARE NOT AN AI.
+YOU ARE NOT GIVING ADVICE.
+YOU ARE WRITING THE MESSAGE ITSELF.
+
+STRICT RULES (NO EXCEPTIONS):
+- DO NOT say: "I came across", "I was impressed", "hope you are doing well"
+- DO NOT sound polite-generic or HR-like
+- DO NOT explain motivation — show it through specificity
+- First line MUST reference a concrete signal (product, launch, post, repo, feature)
+- Ask ONE clear, low-pressure question
+- Sound curious, sharp, and human
+- No emojis
+- No flattery
+- Max 60 words
+
+Bad example (NEVER do this):
+"I came across your company and was impressed..."
+
+Good behavior:
+"Noticed you shipped <specific thing>. Curious if you're open to interns helping with <specific area>."
+
+Write ONLY the message.
+`
+        : `
+You are a senior freelancer writing a proposal to a real paying client.
+
+YOU ARE NOT AN AI.
+YOU ARE NOT DESCRIBING YOURSELF.
+YOU ARE ADDRESSING A BUSINESS PROBLEM.
+
+STRICT RULES:
+- First sentence MUST reference the client’s business or industry
+- Mention ONE concrete business outcome
+- Give ONE specific example of how you’d approach it
+- Never say:
+  "reliable developer"
+  "high-quality solutions"
+  "I'd love to help"
+- No filler
+- No generic sales language
+- Max 120 words
+
+${makeClientFocused && isPro ? `
+PRO RULE:
+- Explicitly state what could go wrong if this is done poorly
+` : ""}
+
+Write ONLY the proposal.
+`;
+
+    /* ---------- USER PROMPT ---------- */
+    const userPrompt =
+      mode === "student"
+        ? `
+Context:
+${input}
+
+Your background: ${role}
+Target industry: ${industry}
+Reason: ${goal}
+What you want clarity on: ${priority}
+
+Extra context:
+${contextNote || ""}
+`
+        : `
+Client context:
+${input}
+
+Role: ${role}
+Industry: ${industry}
+Goal: ${goal}
+Priority: ${priority}
+Tone: ${tone}
+
+Extra context:
+${contextNote || ""}
+`;
+
+    /* ---------- AI ---------- */
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
+      temperature: mode === "student" ? 0.55 : 0.7,
+      max_tokens: mode === "student" ? 140 : 320,
       messages: [
-        {
-          role: "system",
-          content: `You are a professional freelancer writing client proposals.
-          Rules:
-          - Max 120 words
-          - One realistic example
-          - Calm, human tone
-          - Never generic
-          ${body.makeClientFocused && isPro ? "- Address client decision risk explicitly" : ""}`,
-        },
-        {
-          role: "user",
-          content: `
-          Client context: ${body.input}
-          Role: ${body.role}
-          Industry: ${body.industry}
-          Goal: ${body.goal}
-          Priority: ${body.priority}
-          Tone: ${body.tone}
-          Notes: ${body.goalNote || ""} ${body.priorityNote || ""} ${body.contextNote || ""}`,
-        },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ],
     });
 
-    const proposal = completion.choices[0]?.message?.content || "";
+    const proposal = completion.choices[0].message.content?.trim();
 
+    /* ---------- SAVE ---------- */
     await supabase.from("proposals").insert({
-      user_id: user.id,
+      user_id: data.user.id,
       content: proposal,
-      industry: body.industry,
-      goal: body.goal,
-      tone: body.tone,
-      send_status: sendEval.status,
-      send_reason: isPro ? sendEval.reason : null,
-      confidence_score: 8,
+      industry,
+      goal,
+      tone,
+      send_status: evaluateSendStatus({
+        tone,
+        makeClientFocused,
+      }).status,
+      send_reason: isPro
+        ? evaluateSendStatus({ tone, makeClientFocused }).reason
+        : null,
     });
 
+    /* ---------- INCREMENT COUNTERS ---------- */
     if (!isPro) {
-      await supabase.from("profiles").update({ 
-        proposal_count: (typedProfile.proposal_count || 0) + 1 
-      }).eq("id", user.id);
+      await supabase
+        .from("profiles")
+        .update(
+          isFreelancer
+            ? { freelancer_count: profile.freelancer_count + 1 }
+            : { student_count: profile.student_count + 1 }
+        )
+        .eq("id", data.user.id);
     }
 
     return NextResponse.json({
       proposal,
-      sendStatus: sendEval.status,
-      sendReason: isPro ? sendEval.reason : null,
+      remaining: currentLimit - currentCount - (isPro ? 0 : 1),
+      mode,
       isPro,
     });
   } catch (err) {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 }
+    );
   }
 }

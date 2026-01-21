@@ -48,12 +48,17 @@ function Step({
 export default function Home() {
   const router = useRouter();
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(() => {
-      if (mounted) setCheckingAuth(false);
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setIsLoggedIn(!!data.session);
+      setCheckingAuth(false);
     });
+
     return () => {
       mounted = false;
     };
@@ -64,15 +69,23 @@ export default function Home() {
     router.push(data.session ? "/generate" : "/login");
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsLoggedIn(false);
+    router.refresh();
+  };
+
   return (
     <main className="min-h-screen bg-white text-black">
       {/* HERO */}
       <section className="max-w-6xl mx-auto px-6 pt-20 pb-32">
         <div className="max-w-3xl space-y-6">
           <h1 className="text-6xl font-semibold tracking-tight">Klynexa</h1>
+
           <p className="text-lg text-gray-700">
             Proposal intelligence for freelancers who work with serious clients.
           </p>
+
           <ul className="text-sm text-gray-600 space-y-1">
             <li>• Understands client intent, not just prompts</li>
             <li>• Writes proposals grounded in real business context</li>
@@ -91,18 +104,40 @@ export default function Home() {
             </button>
 
             <div className="flex items-center gap-4 text-sm text-gray-600">
-              <Link href="/dashboard" className="underline">Dashboard</Link>
+              <Link href="/dashboard" className="underline">
+                Dashboard
+              </Link>
               <span>•</span>
-              <Link href="/pricing" className="underline">Pricing</Link>
+              <Link href="/pricing" className="underline">
+                Pricing
+              </Link>
+
+              {isLoggedIn && (
+                <>
+                  <span>•</span>
+                  <button
+                    onClick={handleLogout}
+                    className="underline"
+                  >
+                    Logout
+                  </button>
+                </>
+              )}
             </div>
           </div>
-          <p className="text-sm text-gray-500">3 free proposals · No card required</p>
+
+          <p className="text-sm text-gray-500">
+            3 free proposals · No card required
+          </p>
         </div>
       </section>
 
       {/* WHY */}
       <section className="max-w-6xl mx-auto px-6 py-28 border-t">
-        <h2 className="text-3xl font-semibold mb-20">Why Klynexa works</h2>
+        <h2 className="text-3xl font-semibold mb-20">
+          Why Klynexa works
+        </h2>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
           <WhyItem
             number="01"
@@ -125,7 +160,10 @@ export default function Home() {
       {/* HOW */}
       <section className="max-w-6xl mx-auto px-6 py-28">
         <h2 className="text-3xl font-semibold mb-4">How it works</h2>
-        <p className="text-gray-600 mb-20">Less than 2 minutes from job post to send-ready proposal.</p>
+        <p className="text-gray-600 mb-20">
+          Less than 2 minutes from job post to send-ready proposal.
+        </p>
+
         <div className="space-y-20 max-w-3xl">
           <Step
             number="01"
@@ -153,9 +191,11 @@ export default function Home() {
             <br />
             They ignore unclear proposals.
           </h2>
+
           <p className="text-gray-300 mb-8 max-w-2xl">
             Klynexa helps you respond with clarity and confidence — without sounding scripted.
           </p>
+
           <div className="flex items-center gap-6">
             <button
               onClick={handleGenerateClick}
@@ -163,10 +203,15 @@ export default function Home() {
             >
               Generate a free proposal
             </button>
+
             <div className="flex items-center gap-4 text-sm text-gray-300">
-              <Link href="/pricing" className="underline">Pricing</Link>
+              <Link href="/pricing" className="underline">
+                Pricing
+              </Link>
               <span>•</span>
-              <Link href="/dashboard" className="underline">Dashboard</Link>
+              <Link href="/dashboard" className="underline">
+                Dashboard
+              </Link>
             </div>
           </div>
         </div>

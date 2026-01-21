@@ -1,47 +1,97 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/app/lib/supabase";
 
-type Theme = "dark" | "light";
-
-const ThemeContext = createContext<{
-  theme: Theme;
-  toggleTheme: () => void;
-} | null>(null);
-
-export default function ThemeProvider({
+export default function AppShell({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState<string | null>(null);
 
+  /* ---------- AUTH GUARD ---------- */
   useEffect(() => {
-    const saved = localStorage.getItem("theme") as Theme | null;
-    const initial = saved || "dark";
+    let mounted = true;
 
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(initial);
-    setTheme(initial);
-  }, []);
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
 
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(next);
-    localStorage.setItem("theme", next);
-    setTheme(next);
+      if (!data.session) {
+        router.replace("/login");
+        return;
+      }
+
+      if (!mounted) return;
+
+      setEmail(data.session.user.email ?? null);
+      setLoading(false);
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  /* ---------- LOGOUT ---------- */
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/");
   };
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
+  /* ---------- LOADING STATE ---------- */
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
+        Loading…
+      </div>
+    );
+  }
 
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme must be used inside ThemeProvider");
-  return ctx;
+  return (
+    <div className="min-h-screen bg-[#0B0F14] text-white">
+      {/* TOP BAR */}
+      <header className="border-b border-[#1F2937]">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/" className="font-semibold text-lg">
+            Klynexa
+          </Link>
+
+          <div className="flex items-center gap-6 text-sm text-[#9AA4B2]">
+            <Link href="/generate" className="hover:text-white">
+              Generate
+            </Link>
+
+            <Link href="/dashboard" className="hover:text-white">
+              Dashboard
+            </Link>
+
+            {email && (
+              <span className="hidden sm:inline text-xs">
+                {email}
+              </span>
+            )}
+
+            <button
+              onClick={handleLogout}
+              className="hover:text-white underline"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* PAGE CONTENT */}
+      <main className="max-w-6xl mx-auto px-6 py-12">
+        {children}
+      </main>
+    </div>
+  );
 }
