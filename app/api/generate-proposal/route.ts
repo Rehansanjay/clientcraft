@@ -43,8 +43,10 @@ export async function POST(req: Request) {
   try {
     /* ---------- AUTH ---------- */
     const authHeader = req.headers.get("authorization");
+    console.log("Auth Header present:", !!authHeader); // Debug log
+
     if (!authHeader) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized: Missing Auth Header" }, { status: 401 });
     }
 
     // Create a Supabase client scoped to this user
@@ -54,13 +56,17 @@ export async function POST(req: Request) {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { data, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !data.user) {
+      console.error("Auth Error:", userError);
+      return NextResponse.json({ error: "Unauthorized: Invalid Token or User not found" }, { status: 401 });
     }
 
+    console.log("User found:", data.user.id);
+
     /* ---------- PROFILE ---------- */
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select(
         "plan, subscription_active, freelancer_count, student_count"
@@ -68,8 +74,9 @@ export async function POST(req: Request) {
       .eq("id", data.user.id)
       .single();
 
-    if (!profile) {
-      return NextResponse.json({ error: "Profile missing" }, { status: 401 });
+    if (profileError || !profile) {
+      console.error("Profile Missing Error:", profileError);
+      return NextResponse.json({ error: "Unauthorized: Profile missing. Please log out and back in." }, { status: 401 });
     }
 
     const isPro =
