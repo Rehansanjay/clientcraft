@@ -121,17 +121,28 @@ export default function GeneratePage() {
       <div className="w-full max-w-3xl space-y-12">
 
         {/* HEADER */}
-        <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {mode === "freelancer"
-              ? "Generate a client-ready proposal"
-              : "Generate a professional outreach message"}
-          </h1>
-          <p className="text-sm text-[var(--muted)] leading-relaxed">
-            {mode === "freelancer"
-              ? "Add real context (optional). Show value. Send with confidence."
-              : "Reach out politely (optional). Show alignment. Start a real conversation."}
-          </p>
+        <header className="space-y-4">
+          <div className="flex items-center gap-4 text-sm">
+            <button
+              onClick={() => router.push("/")}
+              className="text-[var(--muted)] hover:text-[var(--text)] transition flex items-center gap-1"
+            >
+              ← Back to Home
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {mode === "freelancer"
+                ? "Generate a client-ready proposal"
+                : "Generate a professional outreach message"}
+            </h1>
+            <p className="text-sm text-[var(--muted)] leading-relaxed">
+              {mode === "freelancer"
+                ? "Add real context (optional). Show value. Send with confidence."
+                : "Reach out politely (optional). Show alignment. Start a real conversation."}
+            </p>
+          </div>
         </header>
 
         {/* CARD */}
@@ -147,8 +158,8 @@ export default function GeneratePage() {
                   setTrialCount(0);
                 }}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition ${mode === m
-                    ? "bg-black text-white"
-                    : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]"
+                  ? "bg-black text-white"
+                  : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]"
                   }`}
               >
                 {m === "freelancer" ? "💼 Freelancer" : "🎓 Student / Job"}
