@@ -83,15 +83,15 @@ export default function Home() {
           <h1 className="text-6xl font-semibold tracking-tight">Klynexa</h1>
 
           <p className="text-lg text-gray-700">
-            Proposal intelligence for freelancers who work with serious clients.
+            Professional intelligence for freelancers and students who need to be heard.
           </p>
 
           <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Understands client intent, not just prompts</li>
-            <li>• Writes proposals grounded in real business context</li>
+            <li>• Understands intent (clients or recruiters), not just prompts</li>
+            <li>• Writes proposals and outreach grounded in real context</li>
             <li>• Controls tone, priority, and decision logic</li>
             <li>• Avoids generic AI language by design</li>
-            <li>• Built for professionals, not experimentation</li>
+            <li>• Built for professional results, not experimentation</li>
           </ul>
 
           <div className="flex items-center gap-6 pt-4">
@@ -100,7 +100,7 @@ export default function Home() {
               disabled={checkingAuth}
               className="bg-black text-white px-8 py-4 rounded-md font-medium disabled:opacity-50"
             >
-              Generate your first proposal
+              Generate your first message
             </button>
 
             <div className="flex items-center gap-4 text-sm text-gray-600">
@@ -127,7 +127,7 @@ export default function Home() {
           </div>
 
           <p className="text-sm text-gray-500">
-            3 free proposals · No card required
+            3 free messages · No card required
           </p>
         </div>
       </section>
@@ -142,17 +142,17 @@ export default function Home() {
           <WhyItem
             number="01"
             title="Context over keywords"
-            desc="Klynexa understands industry, client goals, and decision priorities before writing."
+            desc="Klynexa understands the job, company goals, and recruiter priorities before writing."
           />
           <WhyItem
             number="02"
             title="Control without prompt engineering"
-            desc="You select intent and tone. The system handles the thinking."
+            desc="You select intent (internship, contract, etc.) and tone. The system handles the rest."
           />
           <WhyItem
             number="03"
             title="Specific by design"
-            desc="Every proposal includes concrete, realistic examples — no filler."
+            desc="Every message includes concrete, realistic examples — no filler."
           />
         </div>
       </section>
@@ -161,19 +161,19 @@ export default function Home() {
       <section className="max-w-6xl mx-auto px-6 py-28">
         <h2 className="text-3xl font-semibold mb-4">How it works</h2>
         <p className="text-gray-600 mb-20">
-          Less than 2 minutes from job post to send-ready proposal.
+          Less than 2 minutes from job post to send-ready message.
         </p>
 
         <div className="space-y-20 max-w-3xl">
           <Step
             number="01"
-            title="Paste client context"
-            desc="Job post, website, or brief — anything that explains what the client needs."
+            title="Paste context"
+            desc="Job post, company website, or client brief — anything that explains the need."
           />
           <Step
             number="02"
             title="Refine intent"
-            desc="Choose industry, goal, priority, and tone."
+            desc="Choose role (Freelancer/Student), industry, goal, and tone."
           />
           <Step
             number="03"
@@ -187,9 +187,9 @@ export default function Home() {
       <section className="max-w-6xl mx-auto px-6 pb-32">
         <div className="rounded-2xl bg-black text-white p-14">
           <h2 className="text-3xl font-semibold mb-4">
-            Clients don’t ignore good freelancers.
+            Opportunities don’t ignore good people.
             <br />
-            They ignore unclear proposals.
+            They ignore unclear messages.
           </h2>
 
           <p className="text-gray-300 mb-8 max-w-2xl">
@@ -201,7 +201,7 @@ export default function Home() {
               onClick={handleGenerateClick}
               className="bg-white text-black px-8 py-4 rounded-md font-medium"
             >
-              Generate a free proposal
+              Start writing (Free)
             </button>
 
             <div className="flex items-center gap-4 text-sm text-gray-300">
