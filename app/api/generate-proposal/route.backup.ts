@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createOpenAI } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import Groq from "groq-sdk";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const groq = createOpenAI({
-  baseURL: "https://api.groq.com/openai/v1",
+const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 });
 
@@ -179,50 +177,53 @@ Extra context:
 ${contextNote || ""}
 `;
 
-    /* ---------- AI STREAMING ---------- */
-    // Using Vercel AI SDK 'streamText'
-    const result = streamText({
-      model: groq("llama-3.3-70b-versatile"),
+    /* ---------- AI ---------- */
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       temperature: mode === "student" ? 0.55 : 0.7,
-      maxTokens: mode === "student" ? 140 : 320,
-      system: systemPrompt,
-      prompt: userPrompt,
-      onFinish: async ({ text }) => {
-        try {
-          /* ---------- SAVE ---------- */
-          await supabase.from("proposals").insert({
-            user_id: data.user.id,
-            content: text,
-            industry,
-            goal,
-            tone,
-            send_status: evaluateSendStatus({
-              tone,
-              makeClientFocused,
-            }).status,
-            send_reason: isPro
-              ? evaluateSendStatus({ tone, makeClientFocused }).reason
-              : null,
-          });
+      max_tokens: mode === "student" ? 140 : 320,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
 
-          /* ---------- INCREMENT COUNTERS ---------- */
-          if (!isPro) {
-            await supabase
-              .from("profiles")
-              .update(
-                isFreelancer
-                  ? { freelancer_count: profile.freelancer_count + 1 }
-                  : { student_count: profile.student_count + 1 }
-              )
-              .eq("id", data.user.id);
-          }
-        } catch (dbError) {
-          console.error("DB Save failed:", dbError);
-        }
-      },
-    } as any);
+    const proposal = completion.choices[0].message.content?.trim();
 
-    return result.toTextStreamResponse();
+    /* ---------- SAVE ---------- */
+    await supabase.from("proposals").insert({
+      user_id: data.user.id,
+      content: proposal,
+      industry,
+      goal,
+      tone,
+      send_status: evaluateSendStatus({
+        tone,
+        makeClientFocused,
+      }).status,
+      send_reason: isPro
+        ? evaluateSendStatus({ tone, makeClientFocused }).reason
+        : null,
+    });
+
+    /* ---------- INCREMENT COUNTERS ---------- */
+    if (!isPro) {
+      await supabase
+        .from("profiles")
+        .update(
+          isFreelancer
+            ? { freelancer_count: profile.freelancer_count + 1 }
+            : { student_count: profile.student_count + 1 }
+        )
+        .eq("id", data.user.id);
+    }
+
+    return NextResponse.json({
+      proposal,
+      remaining: currentLimit - currentCount - (isPro ? 0 : 1),
+      mode,
+      isPro,
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

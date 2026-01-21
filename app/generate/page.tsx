@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { useCompletion } from "ai/react";
 
 type Mode = "freelancer" | "student";
 
@@ -27,13 +28,40 @@ export default function GeneratePage() {
 
   const [makeClientFocused, setMakeClientFocused] = useState(false);
 
-  const [output, setOutput] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Replaced manual output/loading with useCompletion
   const [trialCount, setTrialCount] = useState(0);
   const [copied, setCopied] = useState(false);
 
   const currentLimit =
     mode === "freelancer" ? FREELANCER_LIMIT : STUDENT_LIMIT;
+
+  /* ---------------- STREAMING ---------------- */
+  const {
+    completion,
+    isLoading,
+    complete,
+    setCompletion, // verify if we need to reset
+  } = useCompletion({
+    api: "/api/generate-proposal",
+    onError: (err: any) => {
+      alert("Error generating: " + err.message);
+    },
+    onResponse: (response: Response) => {
+      if (response.status === 403) {
+        alert("Free limit reached! Upgrade to Pro for unlimited generation.");
+        setTrialCount(currentLimit);
+      }
+    },
+    onFinish: () => {
+      setTrialCount((p) => p + 1);
+    },
+  });
+
+  // Reset completion when mode changes
+  useEffect(() => {
+    setCompletion("");
+  }, [mode, setCompletion]);
+
 
   /* ---------------- AUTH ---------------- */
   useEffect(() => {
@@ -64,53 +92,31 @@ export default function GeneratePage() {
 
     if (trialCount >= currentLimit) return;
 
-    setLoading(true);
-    setOutput("");
+    const session = await getSession();
+    if (!session) return;
 
-    try {
-      const session = await getSession();
-      if (!session) return;
-
-      const res = await fetch("/api/generate-proposal", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          mode,
-          input,
-          role,
-          industry,
-          goal,
-          priority,
-          tone,
-          contextNote,
-          makeClientFocused,
-        }),
-      });
-
-      if (res.status === 403) {
-        setTrialCount(currentLimit);
-        return;
-      }
-
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Generation failed.");
-        return;
-      }
-
-      setOutput(data.proposal);
-      setTrialCount((p) => p + 1);
-    } finally {
-      setLoading(false);
-    }
+    // We pass data via 'body'. The prompt arg is ignored by our API but required by SDK.
+    await complete("", {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: {
+        mode,
+        input,
+        role,
+        industry,
+        goal,
+        priority,
+        tone,
+        contextNote,
+        makeClientFocused,
+      },
+    });
   };
 
   /* ---------------- COPY ---------------- */
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(output);
+    await navigator.clipboard.writeText(completion);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -307,10 +313,10 @@ export default function GeneratePage() {
           {/* ACTION */}
           <button
             onClick={handleGenerate}
-            disabled={loading || trialCount >= currentLimit}
+            disabled={isLoading || trialCount >= currentLimit}
             className="w-full bg-black text-white py-4 rounded-md font-medium disabled:opacity-50"
           >
-            {loading
+            {isLoading
               ? "Writing…"
               : mode === "freelancer"
                 ? "Generate proposal"
@@ -325,7 +331,7 @@ export default function GeneratePage() {
         </div>
 
         {/* OUTPUT */}
-        {output && (
+        {completion && (
           <div className="relative border border-[var(--border)] rounded-lg p-6 bg-[var(--card)] whitespace-pre-line text-sm leading-relaxed">
             <button
               onClick={handleCopy}
@@ -333,7 +339,7 @@ export default function GeneratePage() {
             >
               {copied ? "Copied ✓" : "Copy"}
             </button>
-            {output}
+            {completion}
           </div>
         )}
       </div>
