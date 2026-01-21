@@ -187,7 +187,7 @@ ${contextNote || ""}
       maxTokens: mode === "student" ? 140 : 320,
       system: systemPrompt,
       prompt: userPrompt,
-      onFinish: async ({ text }) => {
+      onFinish: async ({ text }: { text: string }) => {
         try {
           /* ---------- SAVE ---------- */
           await supabase.from("proposals").insert({
