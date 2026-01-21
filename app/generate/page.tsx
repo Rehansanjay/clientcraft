@@ -44,12 +44,11 @@ export default function GeneratePage() {
   } = useCompletion({
     api: "/api/generate-proposal",
     onError: (err: any) => {
-      alert("Error generating: " + err.message);
-    },
-    onResponse: (response: Response) => {
-      if (response.status === 403) {
+      if (err.message.includes("Free limit reached") || err.message.includes("403")) {
         alert("Free limit reached! Upgrade to Pro for unlimited generation.");
         setTrialCount(currentLimit);
+      } else {
+        alert("Error generating: " + err.message);
       }
     },
     onFinish: () => {
