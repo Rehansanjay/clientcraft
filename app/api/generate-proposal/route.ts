@@ -181,6 +181,8 @@ ${contextNote || ""}
 
     /* ---------- AI STREAMING ---------- */
     // Using Vercel AI SDK 'streamText'
+    console.log("Starting streamText...");
+
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
       temperature: mode === "student" ? 0.55 : 0.7,
@@ -188,9 +190,15 @@ ${contextNote || ""}
       system: systemPrompt,
       prompt: userPrompt,
       onFinish: async ({ text }: { text: string }) => {
+        console.log("Stream finished. Text length:", text?.length);
+        if (!text) {
+          console.error("No text generated!");
+          return;
+        }
+
         try {
           /* ---------- SAVE ---------- */
-          await supabase.from("proposals").insert({
+          const { error: insertError } = await supabase.from("proposals").insert({
             user_id: data.user.id,
             content: text,
             industry,
@@ -205,9 +213,15 @@ ${contextNote || ""}
               : null,
           });
 
+          if (insertError) {
+            console.error("Supabase Insert Error:", insertError);
+          } else {
+            console.log("Proposal saved to DB.");
+          }
+
           /* ---------- INCREMENT COUNTERS ---------- */
           if (!isPro) {
-            await supabase
+            const { error: updateError } = await supabase
               .from("profiles")
               .update(
                 isFreelancer
@@ -215,18 +229,20 @@ ${contextNote || ""}
                   : { student_count: profile.student_count + 1 }
               )
               .eq("id", data.user.id);
+
+            if (updateError) console.error("Profile Update Error:", updateError);
           }
         } catch (dbError) {
-          console.error("DB Save failed:", dbError);
+          console.error("DB Save failed (catch):", dbError);
         }
       },
     } as any);
 
     return result.toTextStreamResponse();
   } catch (err) {
-    console.error(err);
+    console.error("Route Error:", err);
     return NextResponse.json(
-      { error: "Server error" },
+      { error: "Server error: " + (err as Error).message },
       { status: 500 }
     );
   }
