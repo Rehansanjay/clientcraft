@@ -76,38 +76,54 @@ export async function POST(req: Request) {
       .eq("id", data.user.id)
       .single();
 
-    // If missing, auto-create a default FREE profile
+    // If missing, auto-create a default FREE profile or fetch if hidden by RLS
     if (!profile) {
-      console.log("Profile missing for user:", data.user.id, "Attempting auto-creation...");
+      console.log("Profile missing for user (User Client):", data.user.id);
 
-      // Use Service Role to bypass RLS for insertion
+      // Use Service Role to act as Admin
       const supabaseAdmin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
 
-      const { data: newProfile, error: createError } = await supabaseAdmin
+      // 1. Double-check if profile exists (Admin level)
+      // This handles cases where RLS prevents the User Client from seeing their own profile
+      const { data: existingProfile, error: fetchError } = await supabaseAdmin
         .from("profiles")
-        .insert({
-          id: data.user.id,
-          // Default values for a new user
-          plan: "free",
-          subscription_active: false,
-          freelancer_count: 0,
-          student_count: 0,
-        })
         .select("plan, subscription_active, freelancer_count, student_count")
+        .eq("id", data.user.id)
         .single();
 
-      if (createError || !newProfile) {
-        console.error("Profile Auto-Creation Failed:", createError);
-        return NextResponse.json({
-          error: `Profile creation failed: ${createError?.message || "Unknown error"}. Details: ${createError?.details || "None"}. Hint: ${createError?.hint || "None"}`
-        }, { status: 500 });
-      }
+      if (existingProfile) {
+        console.log("Profile found via Admin Client (RLS issue likely). Using existing profile.");
+        profile = existingProfile;
+      } else {
+        // 2. Really missing -> Create it
+        console.log("Profile really missing. Attempting auto-creation...");
 
-      console.log("Profile auto-created successfully.");
-      profile = newProfile;
+        const { data: newProfile, error: createError } = await supabaseAdmin
+          .from("profiles")
+          .insert({
+            id: data.user.id,
+            // Default values for a new user
+            plan: "free",
+            subscription_active: false,
+            freelancer_count: 0,
+            student_count: 0,
+          })
+          .select("plan, subscription_active, freelancer_count, student_count")
+          .single();
+
+        if (createError || !newProfile) {
+          console.error("Profile Auto-Creation Failed:", createError);
+          return NextResponse.json({
+            error: `Profile creation failed: ${createError?.message || "Unknown error"}. Details: ${createError?.details || "None"}. Hint: ${createError?.hint || "None"}`
+          }, { status: 500 });
+        }
+
+        console.log("Profile auto-created successfully.");
+        profile = newProfile;
+      }
     }
 
     const isPro =
