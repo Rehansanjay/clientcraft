@@ -96,7 +96,7 @@ export async function POST(req: Request) {
       if (createError || !newProfile) {
         console.error("Profile Auto-Creation Failed:", createError);
         return NextResponse.json({
-          error: "Account setup incomplete: Could not create user profile. Please contact support."
+          error: `Profile creation failed: ${createError?.message || "Unknown error"}. Details: ${createError?.details || "None"}. Hint: ${createError?.hint || "None"}`
         }, { status: 500 });
       }
 
