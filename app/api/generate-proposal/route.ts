@@ -43,69 +43,59 @@ export async function POST(req: Request) {
   try {
     /* ---------- AUTH ---------- */
     const authHeader = req.headers.get("authorization");
-    console.log("Auth Header present:", !!authHeader); // Debug log
 
     if (!authHeader) {
       return NextResponse.json({ error: "Unauthorized: Missing Auth Header" }, { status: 401 });
     }
 
-    // Create a Supabase client scoped to this user
+    // Standard Client for Auth Verification
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (userError || !data.user) {
+    if (userError || !user) {
       console.error("Auth Error:", userError);
       return NextResponse.json({ error: "Unauthorized: Invalid Token or User not found" }, { status: 401 });
     }
 
-    console.log("User found:", data.user.id);
+    /* ---------- ADMIN CLIENT (BYPASS RLS) ---------- */
+    // Initialize early for robust operations
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     /* ---------- PROFILE ---------- */
-    /* ---------- PROFILE ---------- */
-    // Attempt to fetch existing profile
-    let { data: profile, error: profileError } = await supabase
+    // 1. Check with User Client (Standard)
+    let { data: profile } = await supabase
       .from("profiles")
-      .select(
-        "plan, subscription_active, freelancer_count, student_count"
-      )
-      .eq("id", data.user.id)
+      .select("plan, subscription_active, freelancer_count, student_count")
+      .eq("id", user.id)
       .single();
 
-    // If missing, auto-create a default FREE profile or fetch if hidden by RLS
+    // 2. If missing, Check with Admin Client (Hidden by RLS?)
     if (!profile) {
-      console.log("Profile missing for user (User Client):", data.user.id);
-
-      // Use Service Role to act as Admin
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
-
-      // 1. Double-check if profile exists (Admin level)
-      // This handles cases where RLS prevents the User Client from seeing their own profile
-      const { data: existingProfile, error: fetchError } = await supabaseAdmin
+      console.log("Profile missing (Standard). Checking Admin...");
+      const { data: existingProfile } = await supabaseAdmin
         .from("profiles")
         .select("plan, subscription_active, freelancer_count, student_count")
-        .eq("id", data.user.id)
+        .eq("id", user.id)
         .single();
 
       if (existingProfile) {
-        console.log("Profile found via Admin Client (RLS issue likely). Using existing profile.");
+        console.log("Profile found via Admin. Using it.");
         profile = existingProfile;
       } else {
-        // 2. Really missing -> Create it
-        console.log("Profile really missing. Attempting auto-creation...");
-
+        // 3. Really missing -> Create (Admin)
+        console.log("Profile really missing. Creating...");
         const { data: newProfile, error: createError } = await supabaseAdmin
           .from("profiles")
           .insert({
-            id: data.user.id,
-            // Default values for a new user
+            id: user.id,
             plan: "free",
             subscription_active: false,
             freelancer_count: 0,
@@ -115,19 +105,16 @@ export async function POST(req: Request) {
           .single();
 
         if (createError || !newProfile) {
-          console.error("Profile Auto-Creation Failed:", createError);
+          console.error("Profile Creation Failed:", createError);
           return NextResponse.json({
-            error: `Profile creation failed: ${createError?.message || "Unknown error"}. Details: ${createError?.details || "None"}. Hint: ${createError?.hint || "None"}`
+            error: `Profile creation failed: ${createError?.message}`
           }, { status: 500 });
         }
-
-        console.log("Profile auto-created successfully.");
         profile = newProfile;
       }
     }
 
-    const isPro =
-      profile.plan === "pro" && profile.subscription_active === true;
+    const isPro = profile.plan === "pro" && profile.subscription_active === true;
 
     /* ---------- INPUT ---------- */
     const {
@@ -143,22 +130,41 @@ export async function POST(req: Request) {
     } = await req.json();
 
     const isFreelancer = mode === "freelancer";
-    const currentCount = isFreelancer
-      ? profile.freelancer_count
-      : profile.student_count;
-
-    const currentLimit = isFreelancer
-      ? FREELANCER_LIMIT
-      : STUDENT_LIMIT;
+    const currentCount = isFreelancer ? profile.freelancer_count : profile.student_count;
+    const currentLimit = isFreelancer ? FREELANCER_LIMIT : STUDENT_LIMIT;
 
     if (!isPro && currentCount >= currentLimit) {
-      return NextResponse.json(
-        { error: "Free limit reached" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Free limit reached" }, { status: 403 });
     }
 
-    /* ---------- SYSTEM PROMPT (HARD TRAINED) ---------- */
+    /* ---------- ROBUST SAVE: START (PENDING) ---------- */
+    // Insert "Pending" record immediately so we have a DB row even if stream fails
+    console.log("Creating PENDING proposal...");
+
+    const { data: proposalData, error: insertError } = await supabaseAdmin
+      .from("proposals")
+      .insert({
+        user_id: user.id,
+        content: "(Generating...)", // Placeholder
+        industry,
+        goal,
+        tone,
+        send_status: "pending",
+        send_reason: null, // Will update later
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !proposalData) {
+      console.error("Pending Insert Failed:", insertError);
+      return NextResponse.json({ error: "Database Write Failed" }, { status: 500 });
+    }
+
+    const proposalId = proposalData.id;
+    console.log("Pending Proposal Created:", proposalId);
+
+
+    /* ---------- SYSTEM PROMPT ---------- */
     const systemPrompt =
       mode === "student"
         ? `
@@ -235,70 +241,57 @@ ${contextNote || ""}
 `;
 
     /* ---------- AI STREAMING ---------- */
-    // Using Vercel AI SDK 'streamText'
     console.log("Starting streamText...");
 
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
       temperature: mode === "student" ? 0.55 : 0.7,
-      maxTokens: mode === "student" ? 140 : 320,
       system: systemPrompt,
       prompt: userPrompt,
-      onFinish: async ({ text }: { text: string }) => {
-        console.log("Stream finished. Text length:", text?.length);
-        if (!text) {
-          console.error("No text generated!");
-          return;
-        }
+
+      onFinish: async ({ text }) => {
+        console.log("Stream finished. Updating proposal:", proposalId);
+        if (!text) return;
 
         try {
-          /* ---------- SAVE (ADMIN BYPASS) ---------- */
-          // Use Service Role to bypass RLS for insertion and updates
-          // This ensures the proposal is always saved and limits are enforced
-          const supabaseAdmin = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-          );
+          // ROBUST SAVE: COMPLETE
+          // Update the pending record with final text
+          const evalResult = evaluateSendStatus({ tone, makeClientFocused });
 
-          const { error: insertError } = await supabaseAdmin.from("proposals").insert({
-            user_id: data.user.id,
-            content: text,
-            industry,
-            goal,
-            tone,
-            send_status: evaluateSendStatus({
-              tone,
-              makeClientFocused,
-            }).status,
-            send_reason: isPro
-              ? evaluateSendStatus({ tone, makeClientFocused }).reason
-              : null,
-          });
+          const { error: updatePropError } = await supabaseAdmin
+            .from("proposals")
+            .update({
+              content: text,
+              send_status: evalResult.status,
+              send_reason: isPro ? evalResult.reason : null,
+            })
+            .eq("id", proposalId);
 
-          if (insertError) {
-            console.error("Supabase Insert Error (Admin):", insertError);
+          if (updatePropError) {
+            console.error("Proposal Update Failed:", updatePropError);
           } else {
-            console.log("Proposal saved to DB (Admin).");
+            console.log("Proposal Updated to COMPLETE.");
           }
 
-          /* ---------- INCREMENT COUNTERS (ADMIN BYPASS) ---------- */
+          /* ---------- INCREMENT COUNTERS ---------- */
           if (!isPro) {
-            const { error: updateError } = await supabaseAdmin
+            const { error: updateCountError } = await supabaseAdmin
               .from("profiles")
               .update(
                 isFreelancer
                   ? { freelancer_count: profile.freelancer_count + 1 }
                   : { student_count: profile.student_count + 1 }
               )
-              .eq("id", data.user.id);
+              .eq("id", user.id);
 
-            if (updateError) console.error("Profile Update Error (Admin):", updateError);
+            if (updateCountError) console.error("Counter Update Failed:", updateCountError);
           }
+
         } catch (dbError) {
-          console.error("DB Save failed (catch):", dbError);
+          console.error("DB Update failed (catch):", dbError);
         }
       },
-    } as any);
+    });
 
     return result.toTextStreamResponse();
   } catch (err) {
