@@ -66,7 +66,9 @@ export async function POST(req: Request) {
     console.log("User found:", data.user.id);
 
     /* ---------- PROFILE ---------- */
-    const { data: profile, error: profileError } = await supabase
+    /* ---------- PROFILE ---------- */
+    // Attempt to fetch existing profile
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select(
         "plan, subscription_active, freelancer_count, student_count"
@@ -74,9 +76,32 @@ export async function POST(req: Request) {
       .eq("id", data.user.id)
       .single();
 
-    if (profileError || !profile) {
-      console.error("Profile Missing Error:", profileError);
-      return NextResponse.json({ error: "Unauthorized: Profile missing. Please log out and back in." }, { status: 401 });
+    // If missing, auto-create a default FREE profile
+    if (!profile) {
+      console.log("Profile missing for user:", data.user.id, "Attempting auto-creation...");
+
+      const { data: newProfile, error: createError } = await supabase
+        .from("profiles")
+        .insert({
+          id: data.user.id,
+          // Default values for a new user
+          plan: "free",
+          subscription_active: false,
+          freelancer_count: 0,
+          student_count: 0,
+        })
+        .select("plan, subscription_active, freelancer_count, student_count")
+        .single();
+
+      if (createError || !newProfile) {
+        console.error("Profile Auto-Creation Failed:", createError);
+        return NextResponse.json({
+          error: "Account setup incomplete: Could not create user profile. Please contact support."
+        }, { status: 500 });
+      }
+
+      console.log("Profile auto-created successfully.");
+      profile = newProfile;
     }
 
     const isPro =
