@@ -80,7 +80,13 @@ export async function POST(req: Request) {
     if (!profile) {
       console.log("Profile missing for user:", data.user.id, "Attempting auto-creation...");
 
-      const { data: newProfile, error: createError } = await supabase
+      // Use Service Role to bypass RLS for insertion
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const { data: newProfile, error: createError } = await supabaseAdmin
         .from("profiles")
         .insert({
           id: data.user.id,
