@@ -252,12 +252,15 @@ ${contextNote || ""}
         }
 
         try {
-          /* ---------- SAVE ---------- */
-          // Re-create user client inside callback or use the one from closure?
-          // The 'supabase' client from closure relies on 'authHeader'.
-          // 'streamText' might run after the request loop, but 'supabase' object capturing 'authHeader' should persist.
+          /* ---------- SAVE (ADMIN BYPASS) ---------- */
+          // Use Service Role to bypass RLS for insertion and updates
+          // This ensures the proposal is always saved and limits are enforced
+          const supabaseAdmin = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+          );
 
-          const { error: insertError } = await supabase.from("proposals").insert({
+          const { error: insertError } = await supabaseAdmin.from("proposals").insert({
             user_id: data.user.id,
             content: text,
             industry,
@@ -273,14 +276,14 @@ ${contextNote || ""}
           });
 
           if (insertError) {
-            console.error("Supabase Insert Error:", insertError);
+            console.error("Supabase Insert Error (Admin):", insertError);
           } else {
-            console.log("Proposal saved to DB.");
+            console.log("Proposal saved to DB (Admin).");
           }
 
-          /* ---------- INCREMENT COUNTERS ---------- */
+          /* ---------- INCREMENT COUNTERS (ADMIN BYPASS) ---------- */
           if (!isPro) {
-            const { error: updateError } = await supabase
+            const { error: updateError } = await supabaseAdmin
               .from("profiles")
               .update(
                 isFreelancer
@@ -289,7 +292,7 @@ ${contextNote || ""}
               )
               .eq("id", data.user.id);
 
-            if (updateError) console.error("Profile Update Error:", updateError);
+            if (updateError) console.error("Profile Update Error (Admin):", updateError);
           }
         } catch (dbError) {
           console.error("DB Save failed (catch):", dbError);
