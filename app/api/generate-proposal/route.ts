@@ -149,7 +149,7 @@ export async function POST(req: Request) {
         industry,
         goal,
         tone,
-        send_status: "pending",
+        send_status: "revise", // Use valid DB value as placeholder
         send_reason: null, // Will update later
       })
       .select("id")
